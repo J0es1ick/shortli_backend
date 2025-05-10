@@ -3,9 +3,12 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 
+	"github.com/J0es1ick/shortli/internal/app/routes"
 	"github.com/J0es1ick/shortli/internal/config"
 	"github.com/J0es1ick/shortli/internal/database"
+	"github.com/J0es1ick/shortli/internal/repository"
 )
 
 func main() {
@@ -23,4 +26,17 @@ func main() {
 	}
 	fmt.Println("Connection successful")
 	defer db.Close()
+
+	urlRepo := repository.NewUrlRepository(db.DB)
+	handler := routes.SetupRoutes(cfg, urlRepo)
+
+	server := &http.Server{
+		Addr:    ":" + cfg.ServerPort,
+		Handler: handler,
+	}
+
+	log.Printf("Server starting on port %s", cfg.ServerPort)
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatalf("Server failed: %v", err)
+	}
 }
