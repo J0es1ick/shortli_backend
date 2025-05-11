@@ -10,12 +10,13 @@ import (
 
 func SetupRoutes(cfg *config.Config, urlRepository *repository.UrlRepository) http.Handler {
 	mux := http.NewServeMux()
-	handler := urlHandlers.NewHandler(cfg, urlRepository)
+	urlHandler := urlHandlers.NewHandler(cfg, urlRepository)
 
-	mux.HandleFunc("GET /", handler.Home)
-	mux.HandleFunc("POST /api/shorten", handler.Shorten)
-	mux.HandleFunc("GET /api/stats/{shortCode}", handler.Stats)
-	mux.HandleFunc("GET /{shortCode}", handler.Redirect)
+	mux.HandleFunc("GET /", urlHandler.Home)
+	mux.HandleFunc("POST /api/shorten", urlHandler.Shorten)
+	mux.HandleFunc("GET /api/stats/{shortCode}", urlHandler.Stats)
+	mux.HandleFunc("GET /{shortCode}", urlHandler.Redirect)
+	mux.HandleFunc("DELETE /urls/{shortCode}", urlHandler.Delete)
 
 	return mux
 }

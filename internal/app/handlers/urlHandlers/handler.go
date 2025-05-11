@@ -58,6 +58,27 @@ func (h *Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := 0
+    if ctxUserID, ok := r.Context().Value("userID").(int); ok {
+        userID = ctxUserID
+    }
+
+    existingURL, err := h.urlRepository.FindUrlByOriginalUrl(req.OriginalURL)
+    if err == nil {
+        qrCode, err := qrcode.Encode(existingURL.OriginalURL, qrcode.Medium, 256)
+        if err != nil {
+            response.Error(w, http.StatusInternalServerError, "Failed to generate QR code")
+            return
+        }
+        
+        response.JSON(w, http.StatusOK, UrlResponse{
+            OriginalURL:  existingURL.OriginalURL,
+            ShortCode:    existingURL.ShortCode,
+            ShortURL:     fmt.Sprintf("http://%s/%s", h.cfg.ServerPort, existingURL.ShortCode),
+            QRCodeBase64: fmt.Sprintf("data:image/png;base64,%s", qrCode),
+        })
+        return
+    }
 	shortCode := shortener.GenerateShortCode(req.OriginalURL)
 	for {
 		existingURL, err := h.urlRepository.FindUrlByCode(shortCode)
@@ -68,8 +89,6 @@ func (h *Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 			shortCode = shortener.GenerateShortCode(req.OriginalURL + time.Now().String())
 			continue
 		}
-		//if existingURL != nil && existingURL.OriginalURL == req.OriginalURL {	
-		//}
 		break
 	}
 
@@ -82,6 +101,7 @@ func (h *Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 	url := &models.URL{
 		OriginalURL: req.OriginalURL,
 		ShortCode: shortCode,
+		UserId: userID,
 		ClickCount: 0,
 		QRClickCount: 0,
 		CreatedAt: time.Now(),
@@ -151,4 +171,45 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 		URL: *url,
 		TotalClicks: url.ClickCount + url.QRClickCount,
 	})
+}
+
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		response.Error(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	shortCode := strings.TrimPrefix(r.URL.Path, "/urls/")
+
+	userID, ok := r.Context().Value("userID").(int)
+    if !ok || userID == 0 {
+        response.Error(w, http.StatusUnauthorized, "Authentication required")
+        return
+    }
+
+	url, err := h.urlRepository.FindUrlByCode(shortCode)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			response.Error(w, http.StatusNotFound, "URL not found")
+		} else {
+			response.Error(w, http.StatusInternalServerError, "Database error")
+		}
+		return
+	}
+
+	if url.UserId != userID {
+		response.Error(w, http.StatusForbidden, "You don't have permission to delete this URL")
+		return
+	}
+
+	if err := h.urlRepository.DeleteUrlByCode(shortCode); err != nil {
+        response.Error(w, http.StatusInternalServerError, "Failed to delete URL")
+        return
+    }
+
+    response.JSON(w, http.StatusOK, map[string]string{
+        "status":  "success",
+        "message": "URL deleted successfully",
+        "code":    shortCode,
+    })
 }

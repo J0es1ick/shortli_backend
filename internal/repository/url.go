@@ -23,8 +23,8 @@ func NewUrlRepository(db *sqlx.DB) *UrlRepository {
 func (r *UrlRepository) SaveUrl(url *models.URL) (int64, error) {
     query := `
         INSERT INTO url_info 
-            (original_url, short_code, click_count, qr_click_count, created_at) 
-        VALUES ($1, $2, $3, $4, $5)
+            (original_url, short_code, user_id, click_count, qr_click_count, created_at) 
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING url_id
     `
     
@@ -33,6 +33,7 @@ func (r *UrlRepository) SaveUrl(url *models.URL) (int64, error) {
         query,
         url.OriginalURL,
         url.ShortCode,
+        url.UserId,
         url.ClickCount,
         url.QRClickCount,
         url.CreatedAt,
@@ -55,6 +56,7 @@ func (r *UrlRepository) FindUrlByCode(code string) (*models.URL, error) {
             url_id, 
             original_url, 
             short_code, 
+            user_id,
             click_count, 
             qr_click_count, 
             created_at 
@@ -67,11 +69,47 @@ func (r *UrlRepository) FindUrlByCode(code string) (*models.URL, error) {
         &url.ID,
         &url.OriginalURL,
         &url.ShortCode,
+        &url.UserId,
         &url.ClickCount,
         &url.QRClickCount,
         &url.CreatedAt,
     )
     
+    if err != nil {
+        if err == sql.ErrNoRows {
+            return nil, fmt.Errorf("url not found")
+        }
+        return nil, fmt.Errorf("select error: %v", err)
+    }
+    
+    return url, nil
+}
+
+func (r *UrlRepository) FindUrlByOriginalUrl(originalUrl string) (*models.URL, error) {
+    query := `
+        SELECT 
+            url_id, 
+            original_url, 
+            short_code, 
+            user_id,
+            click_count, 
+            qr_click_count, 
+            created_at 
+        FROM url_info 
+        WHERE original_url = $1
+    `
+
+    url := &models.URL{}
+    err := r.db.QueryRow(query, originalUrl).Scan(
+        &url.ID,
+        &url.OriginalURL,
+        &url.ShortCode,
+        &url.UserId,
+        &url.ClickCount,
+        &url.QRClickCount,
+        &url.CreatedAt,
+    )
+
     if err != nil {
         if err == sql.ErrNoRows {
             return nil, fmt.Errorf("url not found")
