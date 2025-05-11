@@ -20,40 +20,45 @@ func NewUserRepository(db *sqlx.DB) *UserRepository {
 	}
 }
 
-func (r *UserRepository) SaveUser(User *models.User) (int64, error) {
-	stmt, err := r.db.Prepare("INSERT INTO User_info (username, email, password_hash) VALUES (?, ?, ?)")
-	if err != nil {
-		return 0, fmt.Errorf("preparing insert operator error: %v", err)
-	}
+func (r *UserRepository) SaveUser(user *models.User) (int64, error) {
+	query := `
+		INSERT INTO User_info 
+			(username, email, password_hash) 
+		VALUES ($1, $2, $3)
+		RETURNING user_id`
 
-	res, err := stmt.Exec(User.Username, User.Email, User.PasswordHash)
+	var id int64
+	err := r.db.QueryRow(query, user.Username, user.Email, user.PasswordHash).Scan(&id)
+
 	if err != nil {
 		var pgErr *pq.Error
-		if errors.As(err, &pgErr) {
-			if pgErr.Code == "23505" {
-				return 0, fmt.Errorf("unique constraint violation: %v", err)
-			}
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return 0, fmt.Errorf("user with this code already exists")
 		}
 		return 0, fmt.Errorf("insert value error: %v", err)
-	}
-
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("failed to get last insert id: %v", err)
 	}
 
 	return id, nil
 }
 
 func (r *UserRepository) FindUserById(id int) (*models.User, error) {
-	stmt, err := r.db.Prepare("SELECT id, username, email, password_hash FROM users WHERE id = ?")
-	if err != nil {
-		return nil, fmt.Errorf("preparing select operator error: %v",  err)
-	}
+	query := `
+		SELECT 
+			id,
+			username, 
+			email, 
+			password_hash 
+		FROM User_info 
+		WHERE id = $1`
 
-	User := &models.User{}
-    
-    err = stmt.QueryRow(id).Scan(&User.ID, &User.Username, &User.Email, &User.PasswordHash)
+	user := &models.User{}   
+    err := r.db.QueryRow(query, id).Scan(
+		&user.ID, 
+		&user.Username, 
+		&user.Email, 
+		&user.PasswordHash,
+	)
+	
 	if err != nil {
         if err == sql.ErrNoRows {
             return nil, fmt.Errorf("user not found")
@@ -61,18 +66,27 @@ func (r *UserRepository) FindUserById(id int) (*models.User, error) {
         return nil, fmt.Errorf("scan row: %v", err)
     }
 
-	return User, nil
+	return user, nil
 }
 
 func (r *UserRepository) FindUserByUsername(username string) (*models.User, error) {
-    stmt, err := r.db.Prepare("SELECT id, username, email, password_hash FROM users WHERE username = ?")
-	if err != nil {
-		return nil, fmt.Errorf("preparing select operator error: %v",  err)
-	}
+    query := `
+		SELECT 
+			id,
+			username, 
+			email, 
+			password_hash 
+		FROM User_info 
+		WHERE username = $1`
 
-	User := &models.User{}
-    
-    err = stmt.QueryRow(username).Scan(&User.ID, &User.Username, &User.Email, &User.PasswordHash)
+	user := &models.User{}  
+    err := r.db.QueryRow(query, username).Scan(
+		&user.ID, 
+		&user.Username, 
+		&user.Email, 
+		&user.PasswordHash,
+	)
+
 	if err != nil {
         if err == sql.ErrNoRows {
             return nil, fmt.Errorf("user not found")
@@ -80,31 +94,53 @@ func (r *UserRepository) FindUserByUsername(username string) (*models.User, erro
         return nil, fmt.Errorf("scan row: %v", err)
     }
 
-	return User, nil
+	return user, nil
 }
 
-func (r *UserRepository) UpdateUserById(User *models.User) error {
-	stmt, err := r.db.Prepare("UPDATE User_info SET username = ?, email = ?, password_hash = ? WHERE id = ?")
-	if err != nil {
-		return fmt.Errorf("preparing update operator error: %v", err)
-	}
+func (r *UserRepository) UpdateUserById(user *models.User) error {
+	query := `
+		UPDATE User_info 
+		SET 
+			username = $1, 
+			email = $2, 
+			password_hash = $3
+		WHERE id = $4`
 
-	_, err = stmt.Exec(User.Username, User.Email, User.PasswordHash, User.ID)
+
+	result, err := r.db.Exec(
+        query,
+        user.Username, 
+		user.Email, 
+		user.PasswordHash, 
+		user.ID,
+    )	
+
 	if err != nil {
 		return fmt.Errorf("update value error: %v", err)
 	}
 
-	return nil
+	rowsAffected, err := result.RowsAffected()
+    if err != nil {
+        return fmt.Errorf("failed to get rows affected: %v", err)
+    }
+    
+    if rowsAffected == 0 {
+        return fmt.Errorf("no rows updated - user with id %d not found", user.ID)
+    }
+    
+    return nil
 }
 
 func (r *UserRepository) DeleteUserById(id int) error {
-	stmt, err := r.db.Prepare("DELETE FROM users WHERE id = ?")
-	if err != nil {
-		return fmt.Errorf("preparing delete operator error: %v", err)
-	}
+	query := `DELETE FROM User_info WHERE id = ?`
 
-	_, err = stmt.Exec(id)
+	var deletedID int64
+    err := r.db.QueryRow(query, id).Scan(&deletedID)
+
 	if err != nil {
+		if err == sql.ErrNoRows {
+            return fmt.Errorf("url with code '%d' not found", deletedID)
+        }
 		return fmt.Errorf("delete value error: %v", err)
 	}
 

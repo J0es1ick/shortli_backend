@@ -141,12 +141,12 @@ func (r *UrlRepository) UpdateUrlByCode(url *models.URL) error {
     )
     
     if err != nil {
-        return fmt.Errorf("update value error: %w", err)
+        return fmt.Errorf("update value error: %v", err)
     }
     
     rowsAffected, err := result.RowsAffected()
     if err != nil {
-        return fmt.Errorf("failed to get rows affected: %w", err)
+        return fmt.Errorf("failed to get rows affected: %v", err)
     }
     
     if rowsAffected == 0 {
@@ -170,7 +170,7 @@ func (r *UrlRepository) DeleteUrlByCode(code string) error {
         if err == sql.ErrNoRows {
             return fmt.Errorf("url with code '%s' not found", code)
         }
-        return fmt.Errorf("delete value error: %w", err)
+        return fmt.Errorf("delete value error: %v", err)
     }
     
     return nil
