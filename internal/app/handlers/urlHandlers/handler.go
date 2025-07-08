@@ -59,9 +59,6 @@ func (h *Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := 0
-    if ctxUserID, ok := r.Context().Value("userID").(int); ok {
-        userID = ctxUserID
-    }
 
     existingURL, err := h.urlRepository.FindUrlByOriginalUrl(req.OriginalURL)
     if err == nil {
@@ -174,36 +171,19 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		response.Error(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	shortCode := strings.TrimPrefix(r.URL.Path, "/urls/")
-
-	userID, ok := r.Context().Value("userID").(int)
-    if !ok || userID == 0 {
-        response.Error(w, http.StatusUnauthorized, "Authentication required")
+    if r.Method != http.MethodDelete {
+        response.Error(w, http.StatusMethodNotAllowed, "Method not allowed")
         return
     }
 
-	url, err := h.urlRepository.FindUrlByCode(shortCode)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			response.Error(w, http.StatusNotFound, "URL not found")
-		} else {
-			response.Error(w, http.StatusInternalServerError, "Database error")
-		}
-		return
-	}
+    shortCode := strings.TrimPrefix(r.URL.Path, "/urls/")
 
-	if url.UserId != userID {
-		response.Error(w, http.StatusForbidden, "You don't have permission to delete this URL")
-		return
-	}
-
-	if err := h.urlRepository.DeleteUrlByCode(shortCode); err != nil {
-        response.Error(w, http.StatusInternalServerError, "Failed to delete URL")
+    if err := h.urlRepository.DeleteUrlByCode(shortCode); err != nil {
+        if strings.Contains(err.Error(), "not found") {
+            response.Error(w, http.StatusNotFound, "URL not found")
+        } else {
+            response.Error(w, http.StatusInternalServerError, "Failed to delete URL")
+        }
         return
     }
 

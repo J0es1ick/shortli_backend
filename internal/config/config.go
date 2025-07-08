@@ -11,7 +11,6 @@ import (
 
 type Config struct {
 	ServerPort string   `mapstructure:"SERVER_PORT"`
-	RedisURL   string   `mapstructure:"REDIS_URL"`
 	Database   Database `mapstructure:",squash"`
 }
 
