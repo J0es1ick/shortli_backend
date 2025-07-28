@@ -2,6 +2,7 @@ package urlHandlers
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,17 +63,18 @@ func (h *Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 
     existingURL, err := h.urlRepository.FindUrlByOriginalUrl(req.OriginalURL)
     if err == nil {
-        qrCode, err := qrcode.Encode(existingURL.OriginalURL, qrcode.Medium, 256)
+        qrCode, err := qrcode.Encode(existingURL.OriginalURL, qrcode.Low, 150)
         if err != nil {
             response.Error(w, http.StatusInternalServerError, "Failed to generate QR code")
             return
         }
         
+		qrCodeBase64 := base64.StdEncoding.EncodeToString(qrCode)
         response.JSON(w, http.StatusOK, UrlResponse{
             OriginalURL:  existingURL.OriginalURL,
             ShortCode:    existingURL.ShortCode,
             ShortURL:     fmt.Sprintf("http://%s/%s", h.cfg.ServerPort, existingURL.ShortCode),
-            QRCodeBase64: fmt.Sprintf("data:image/png;base64,%s", qrCode),
+            QRCodeBase64: fmt.Sprintf("data:image/png;base64,%s", qrCodeBase64),
         })
         return
     }
@@ -89,7 +91,7 @@ func (h *Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 		break
 	}
 
-	qrCode, err := qrcode.Encode(req.OriginalURL, qrcode.Medium, 256) 
+	qrCode, err := qrcode.Encode(req.OriginalURL, qrcode.Low, 150) 
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "Failed to generate QR code")
 		return
@@ -100,7 +102,6 @@ func (h *Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 		ShortCode: shortCode,
 		UserId: userID,
 		ClickCount: 0,
-		QRClickCount: 0,
 		CreatedAt: time.Now(),
 	}
 
@@ -113,11 +114,12 @@ func (h *Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	qrCodeBase64 := base64.StdEncoding.EncodeToString(qrCode)
 	response.JSON(w, http.StatusCreated, UrlResponse{
 		OriginalURL: req.OriginalURL,
 		ShortCode: shortCode,
 		ShortURL: fmt.Sprintf("http://%s/%s", h.cfg.ServerPort, shortCode),
-		QRCodeBase64: fmt.Sprintf("data:image/png;base64,%s", qrCode),
+		QRCodeBase64: fmt.Sprintf("data:image/png;base64,%s", qrCodeBase64),
 	})
 }
 
@@ -133,12 +135,8 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.Contains(r.UserAgent(), "QR") {
-		url.QRClickCount++
-	} else {
-		url.ClickCount++
-	}
-
+	url.ClickCount++
+	
 	if err := h.urlRepository.UpdateUrlByCode(url); err != nil {
 		response.Error(w, http.StatusInternalServerError, "Failed to update click count")
 		return
@@ -166,7 +164,7 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 
 	response.JSON(w, http.StatusOK, StatsResponse{
 		URL: *url,
-		TotalClicks: url.ClickCount + url.QRClickCount,
+		TotalClicks: url.ClickCount,
 	})
 }
 

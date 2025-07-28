@@ -23,8 +23,8 @@ func NewUrlRepository(db *sqlx.DB) *UrlRepository {
 func (r *UrlRepository) SaveUrl(url *models.URL) (int64, error) {
     query := `
         INSERT INTO url_info 
-            (original_url, short_code, user_id, click_count, qr_click_count, created_at) 
-        VALUES ($1, $2, $3, $4, $5, $6)
+            (original_url, short_code, user_id, click_count, created_at) 
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING url_id
     `
     
@@ -35,7 +35,6 @@ func (r *UrlRepository) SaveUrl(url *models.URL) (int64, error) {
         url.ShortCode,
         url.UserId,
         url.ClickCount,
-        url.QRClickCount,
         url.CreatedAt,
     ).Scan(&id)
     
@@ -58,7 +57,6 @@ func (r *UrlRepository) FindUrlByCode(code string) (*models.URL, error) {
             short_code, 
             user_id,
             click_count, 
-            qr_click_count, 
             created_at 
         FROM url_info 
         WHERE short_code = $1
@@ -71,7 +69,6 @@ func (r *UrlRepository) FindUrlByCode(code string) (*models.URL, error) {
         &url.ShortCode,
         &url.UserId,
         &url.ClickCount,
-        &url.QRClickCount,
         &url.CreatedAt,
     )
     
@@ -93,7 +90,6 @@ func (r *UrlRepository) FindUrlByOriginalUrl(originalUrl string) (*models.URL, e
             short_code, 
             user_id,
             click_count, 
-            qr_click_count, 
             created_at 
         FROM url_info 
         WHERE original_url = $1
@@ -106,7 +102,6 @@ func (r *UrlRepository) FindUrlByOriginalUrl(originalUrl string) (*models.URL, e
         &url.ShortCode,
         &url.UserId,
         &url.ClickCount,
-        &url.QRClickCount,
         &url.CreatedAt,
     )
 
@@ -125,17 +120,15 @@ func (r *UrlRepository) UpdateUrlByCode(url *models.URL) error {
         UPDATE url_info 
         SET 
             original_url = $1, 
-            click_count = $2, 
-            qr_click_count = $3,
-            created_at = $4
-        WHERE short_code = $5
+            click_count = $2,
+            created_at = $3
+        WHERE short_code = $4
     `
     
     result, err := r.db.Exec(
         query,
         url.OriginalURL,
         url.ClickCount,
-        url.QRClickCount,
         url.CreatedAt,
         url.ShortCode,
     )
