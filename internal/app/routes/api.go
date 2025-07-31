@@ -15,7 +15,8 @@ func SetupRoutes(cfg *config.Config, urlRepository *repository.UrlRepository) ht
     
     mux.HandleFunc("GET /", urlHandler.Home)
     mux.HandleFunc("POST /api/shorten", urlHandler.Shorten)
-    mux.HandleFunc("GET /api/stats/{shortCode}", urlHandler.Stats)
+    mux.HandleFunc("GET /api/stats/{shortCode}", urlHandler.UrlStats)
+	mux.HandleFunc("GET /api/stats", urlHandler.Stats)
     mux.HandleFunc("GET /{shortCode}", urlHandler.Redirect)
     mux.HandleFunc("DELETE /urls/{shortCode}", urlHandler.Delete)
 

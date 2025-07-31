@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -145,7 +147,7 @@ func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url.OriginalURL, http.StatusMovedPermanently)
 }
 
-func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UrlStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		response.Error(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
@@ -162,10 +164,55 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.JSON(w, http.StatusOK, StatsResponse{
+	response.JSON(w, http.StatusOK, UrlStatsResponse{
 		URL: *url,
 		TotalClicks: url.ClickCount,
 	})
+}
+
+func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		response.Error(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	page, err := strconv.Atoi(r.URL.Query().Get("page"))
+    if page < 1 || err != nil {
+        page = 1
+    }
+
+    limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+    if limit < 1 || limit > 100 || err != nil {
+        limit = 10 
+    }
+
+    offset := (page - 1) * limit
+
+	urls, err := h.urlRepository.FindAllUrl(limit, offset)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			response.Error(w, http.StatusNotFound, "URL not found")
+		} else {
+			response.Error(w, http.StatusInternalServerError, "Database error")
+		}
+		return
+	}
+
+	total, err := h.urlRepository.GetTotalUrls()
+    if err != nil {
+        response.Error(w, http.StatusInternalServerError, "Failed to get total count")
+        return
+    }
+
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+        "data": urls,
+        "meta": map[string]interface{}{
+            "total":     total,
+            "page":      page,
+            "limit":     limit,
+            "totalPages": int(math.Ceil(float64(total) / float64(limit))),
+        },
+    })
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {

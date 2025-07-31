@@ -13,7 +13,7 @@ type UrlResponse struct {
 	QRCodeBase64 string `json:"qr_code_base64,omitempty"`
 }
 
-type StatsResponse struct {
+type UrlStatsResponse struct {
 	models.URL
 	TotalClicks int `json:"total_clicks"`
 }

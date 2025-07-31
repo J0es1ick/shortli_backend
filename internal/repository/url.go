@@ -49,6 +49,46 @@ func (r *UrlRepository) SaveUrl(url *models.URL) (int64, error) {
     return id, nil
 }
 
+func (r *UrlRepository) FindAllUrl(limit, offset int) ([]models.URL, error) {
+    query := `
+        SELECT 
+            url_id, 
+            original_url, 
+            short_code, 
+            user_id,
+            click_count, 
+            created_at 
+        FROM url_info
+        LIMIT $1 OFFSET $2
+    `
+
+    urls := []models.URL{}
+    err := r.db.Select(&urls, query, limit, offset)
+
+    if err != nil {
+        if err == sql.ErrNoRows {
+            return nil, fmt.Errorf("url not found")
+        }
+        return nil, fmt.Errorf("select error: %v", err)
+    }
+
+    if len(urls) == 0 {
+        return nil, fmt.Errorf("no URLs found")
+    }
+    
+    return urls, nil
+}
+
+func (r *UrlRepository) GetTotalUrls() (int, error) {
+    var count int
+    err := r.db.QueryRow("SELECT COUNT(*) FROM url_info").Scan(&count)
+    if err != nil {
+        return 0, fmt.Errorf("count error: %w", err)
+    }
+
+    return count, nil
+}
+
 func (r *UrlRepository) FindUrlByCode(code string) (*models.URL, error) {
     query := `
         SELECT 
