@@ -208,3 +208,32 @@ func (r *UrlRepository) DeleteUrlByCode(code string) error {
     
     return nil
 }
+
+func (r *UrlRepository)DeleteOldUrls() (int64, error) {
+    query := `
+        DELETE FROM url_info 
+        WHERE created_at < NOW() - INTERVAL '1 month'
+        RETURNING url_id
+    `
+
+    rows, err := r.db.Query(query)
+    if err != nil {
+        return 0, fmt.Errorf("delete old urls error: %v", err)
+    }
+    defer rows.Close()
+    
+    var count int64
+    for rows.Next() {
+        var id int64
+        if err := rows.Scan(&id); err != nil {
+            return 0, fmt.Errorf("scan deleted id error: %v", err)
+        }
+        count++
+    }
+    
+    if err := rows.Err(); err != nil {
+        return 0, fmt.Errorf("rows error: %v", err)
+    }
+    
+    return count, nil
+}

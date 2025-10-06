@@ -17,6 +17,7 @@ import (
 	"github.com/J0es1ick/shortli/internal/models"
 	"github.com/J0es1ick/shortli/internal/repository"
 	"github.com/J0es1ick/shortli/pkg/shortener"
+	"github.com/J0es1ick/shortli/pkg/validator"
 	"github.com/skip2/go-qrcode"
 )
 
@@ -61,50 +62,67 @@ func (h *Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	normalizedURL, err := validator.ValidateURL(req.OriginalURL)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.OriginalURL = normalizedURL
+
 	userID := 0
 
-    existingURL, err := h.urlRepository.FindUrlByOriginalUrl(req.OriginalURL)
-    if err == nil {
-        qrCode, err := qrcode.Encode(existingURL.OriginalURL, qrcode.Low, 150)
-        if err != nil {
-            response.Error(w, http.StatusInternalServerError, "Failed to generate QR code")
-            return
-        }
-        
+	existingURL, err := h.urlRepository.FindUrlByOriginalUrl(req.OriginalURL)
+	if err == nil {
+		qrCode, err := qrcode.Encode(existingURL.OriginalURL, qrcode.Low, 150)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, "Failed to generate QR code")
+			return
+		}
+		
 		qrCodeBase64 := base64.StdEncoding.EncodeToString(qrCode)
-        response.JSON(w, http.StatusOK, UrlResponse{
-            OriginalURL:  existingURL.OriginalURL,
-            ShortCode:    existingURL.ShortCode,
-            ShortURL:     fmt.Sprintf("http://%s/%s", h.cfg.ServerPort, existingURL.ShortCode),
-            QRCodeBase64: fmt.Sprintf("data:image/png;base64,%s", qrCodeBase64),
-        })
-        return
-    }
-	shortCode := shortener.GenerateShortCode(req.OriginalURL)
+		response.JSON(w, http.StatusOK, UrlResponse{
+			OriginalURL:  existingURL.OriginalURL,
+			ShortCode:    existingURL.ShortCode,
+			ShortURL:     fmt.Sprintf("http://%s/%s", h.cfg.ServerPort, existingURL.ShortCode),
+			QRCodeBase64: fmt.Sprintf("data:image/png;base64,%s", qrCodeBase64),
+		})
+		return
+	}
+
+	attempt := 0
+	var shortCode string
+	var existingURLByCode *models.URL
+
 	for {
-		existingURL, err := h.urlRepository.FindUrlByCode(shortCode)
+		shortCode = shortener.GenerateShortCode(req.OriginalURL, attempt)
+		
+		existingURLByCode, err = h.urlRepository.FindUrlByCode(shortCode)
 		if err != nil && strings.Contains(err.Error(), "url not found") {
 			break 
 		}
-		if existingURL != nil && existingURL.OriginalURL != req.OriginalURL {
-			shortCode = shortener.GenerateShortCode(req.OriginalURL + time.Now().String())
+		
+		if existingURLByCode != nil {
+			if existingURLByCode.OriginalURL == req.OriginalURL {
+				shortCode = existingURLByCode.ShortCode
+				break
+			}
+			attempt++
+			if attempt > 5 {
+				response.Error(w, http.StatusInternalServerError, "Failed to generate unique short code")
+				return
+			}
 			continue
 		}
+		
 		break
-	}
-
-	qrCode, err := qrcode.Encode(req.OriginalURL, qrcode.Low, 150) 
-	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to generate QR code")
-		return
 	}
 
 	url := &models.URL{
 		OriginalURL: req.OriginalURL,
-		ShortCode: shortCode,
-		UserId: userID,
-		ClickCount: 0,
-		CreatedAt: time.Now(),
+		ShortCode:   shortCode,
+		UserId:      userID,
+		ClickCount:  0,
+		CreatedAt:   time.Now(),
 	}
 
 	if _, err := h.urlRepository.SaveUrl(url); err != nil {
@@ -116,11 +134,17 @@ func (h *Handler) Shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	qrCode, err := qrcode.Encode(req.OriginalURL, qrcode.Low, 150)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to generate QR code")
+		return
+	}
+
 	qrCodeBase64 := base64.StdEncoding.EncodeToString(qrCode)
 	response.JSON(w, http.StatusCreated, UrlResponse{
-		OriginalURL: req.OriginalURL,
-		ShortCode: shortCode,
-		ShortURL: fmt.Sprintf("http://%s/%s", h.cfg.ServerPort, shortCode),
+		OriginalURL:  req.OriginalURL,
+		ShortCode:    shortCode,
+		ShortURL:     fmt.Sprintf("http://%s/%s", h.cfg.ServerPort, shortCode),
 		QRCodeBase64: fmt.Sprintf("data:image/png;base64,%s", qrCodeBase64),
 	})
 }
